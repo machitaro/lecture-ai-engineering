@@ -57,37 +57,108 @@ def display_chat_page(pipe):
                   st.rerun() # 画面をクリア
 
 
-def display_feedback_form():
-    """フィードバック入力フォームを表示する"""
-    with st.form("feedback_form"):
-        st.subheader("フィードバック")
-        feedback_options = ["正確", "部分的に正確", "不正確"]
-        # label_visibility='collapsed' でラベルを隠す
-        feedback = st.radio("回答の評価", feedback_options, key="feedback_radio", label_visibility='collapsed', horizontal=True)
-        correct_answer = st.text_area("より正確な回答（任意）", key="correct_answer_input", height=100)
-        feedback_comment = st.text_area("コメント（任意）", key="feedback_comment_input", height=100)
-        submitted = st.form_submit_button("フィードバックを送信")
-        if submitted:
-            # フィードバックをデータベースに保存
-            is_correct = 1.0 if feedback == "正確" else (0.5 if feedback == "部分的に正確" else 0.0)
-            # コメントがない場合でも '正確' などの評価はfeedbackに含まれるようにする
-            combined_feedback = f"{feedback}"
-            if feedback_comment:
-                combined_feedback += f": {feedback_comment}"
+# def display_feedback_form():
+#     """フィードバック入力フォームを表示する"""
+#     with st.form("feedback_form"):
+#         st.subheader("フィードバック")
+#         feedback_options = ["正確", "部分的に正確", "不正確"]
+#         # label_visibility='collapsed' でラベルを隠す
+#         feedback = st.radio("回答の評価", feedback_options, key="feedback_radio", label_visibility='collapsed', horizontal=True)
+#         correct_answer = st.text_area("より正確な回答（任意）", key="correct_answer_input", height=100)
+#         feedback_comment = st.text_area("コメント（任意）", key="feedback_comment_input", height=100)
+#         submitted = st.form_submit_button("フィードバックを送信")
+#         if submitted:
+#             # フィードバックをデータベースに保存
+#             is_correct = 1.0 if feedback == "正確" else (0.5 if feedback == "部分的に正確" else 0.0)
+#             # コメントがない場合でも '正確' などの評価はfeedbackに含まれるようにする
+#             combined_feedback = f"{feedback}"
+#             if feedback_comment:
+#                 combined_feedback += f": {feedback_comment}"
 
-            save_to_db(
-                st.session_state.current_question,
-                st.session_state.current_answer,
-                combined_feedback,
-                correct_answer,
-                is_correct,
-                st.session_state.response_time
+#             save_to_db(
+#                 st.session_state.current_question,
+#                 st.session_state.current_answer,
+#                 combined_feedback,
+#                 correct_answer,
+#                 is_correct,
+#                 st.session_state.response_time
+#             )
+#             st.session_state.feedback_given = True
+#             st.success("フィードバックが保存されました！")
+#             # フォーム送信後に状態をリセットしない方が、ユーザーは結果を確認しやすいかも
+#             # 必要ならここでリセットして st.rerun()
+#             st.rerun() # フィードバックフォームを消すために再実行
+
+def display_feedback_form():
+    """10段階評価スライダーを使用したフィードバック入力フォームを表示する"""
+    with st.expander("フィードバックを送信する", expanded=True):
+        with st.form("feedback_form"):
+            st.write("### この回答の正確性を評価してください")
+            
+            # 10段階スライダーを使用
+            accuracy_score = st.slider(
+                "正確性",
+                min_value=1,
+                max_value=10,
+                value=5,  # デフォルト値
+                step=1,
+                help="1：完全に不正確 → 10：完全に正確",
+                key="accuracy_slider"
             )
-            st.session_state.feedback_given = True
-            st.success("フィードバックが保存されました！")
-            # フォーム送信後に状態をリセットしない方が、ユーザーは結果を確認しやすいかも
-            # 必要ならここでリセットして st.rerun()
-            st.rerun() # フィードバックフォームを消すために再実行
+            
+            if accuracy_score >= 8:
+                st.success(f"高評価: {accuracy_score}/10")
+            elif accuracy_score >= 4:
+                st.warning(f"中評価: {accuracy_score}/10")
+            else:
+                st.error(f"低評価: {accuracy_score}/10")
+            
+            correct_answer = st.text_area(
+                "より正確な回答（任意）", 
+                key="correct_answer_input", 
+                height=100,
+                placeholder="より正確な回答があれば入力してください"
+            )
+            
+            feedback_comment = st.text_area(
+                "コメント（任意）", 
+                key="feedback_comment_input", 
+                height=100,
+                placeholder="このフィードバックに関する追加コメント"
+            )
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                submitted = st.form_submit_button("フィードバックを送信", use_container_width=True)
+            
+            if submitted:
+                # スライダーの値を0～1の範囲に正規化（データベース保存用）
+                normalized_score = accuracy_score / 10.0
+                
+                # フィードバックに対応するラベル（表示用）
+                if accuracy_score >= 8:
+                    accuracy_label = "正確"
+                elif accuracy_score >= 4:
+                    accuracy_label = "部分的に正確"
+                else:
+                    accuracy_label = "不正確"
+                
+                combined_feedback = f"{accuracy_label} (スコア: {accuracy_score}/10)"
+                if feedback_comment:
+                    combined_feedback += f": {feedback_comment}"
+                
+                # データベースに保存
+                save_to_db(
+                    st.session_state.current_question,
+                    st.session_state.current_answer,
+                    combined_feedback,
+                    correct_answer,
+                    normalized_score,  # 正規化されたスコアを保存
+                    st.session_state.response_time
+                )
+                st.session_state.feedback_given = True
+                st.success("フィードバックが保存されました！")
+                st.rerun()
 
 # --- 履歴閲覧ページのUI ---
 def display_history_page():
